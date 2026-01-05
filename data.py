@@ -1,20 +1,22 @@
 """
 Author: Dr. Jin Zhang
 E-mail: j.zhang@kust.edu.cn
-Dept: Kunming University of Science and Technology
+URL: https://github.com/jinzhangkust
+Dept: Kunming University of Science and Technology (KUST)
 Created on 2025.07.05
+Modified on 2026.01.04
 """
 
 import torch
 import torchvision
 from torch.utils.data import Dataset
 
-import numpy as np
-from PIL import Image, ImageFile, ImageFilter
-import pandas as pd
-import random
 import os
 import glob
+import random
+import numpy as np
+import pandas as pd
+from PIL import Image, ImageFile, ImageFilter
 
 
 normalize = torchvision.transforms.Normalize(mean=[0.5561, 0.5706, 0.5491], std=[0.1833, 0.1916, 0.2061])
@@ -101,8 +103,55 @@ class data4cls(Dataset):
         return idx, im, label
 
 
+class stibium_data(Dataset):
+    def __init__(self, imsize=300):
+        root = '/home/libsv/Data/StibiumData/normal'
+        self.imfiles = []
+        self.labels = []
+        self.imsize = imsize
+        for class_folder in os.listdir(root):  # 1 2 3 4 5
+            file_path = root + '/' + class_folder
+            clip_folder = os.listdir(file_path)  # c1_*  c2_*  c3_*  c4_*  c5_*
+            for item in clip_folder:
+                full_path = file_path + '/' +item
+                #print(full_path)   # /home/libsv/Data/StibiumData/normal/c1_1/
+                file = os.path.join(full_path, '*_1.jpg')  # /home/libsv/Data/StibiumData/normal/c1_1/stibium_c1_1.jpg
+                for im in glob.glob(file):
+                    self.imfiles.append(im)
+                    label = int(class_folder[0]) - 1
+                    #print(f"label: {label}")
+                    self.labels.append(label)
+
+        self.transform = torchvision.transforms.Compose([
+            torchvision.transforms.RandomResizedCrop(self.imsize, scale=((self.imsize-10) / 400, (self.imsize+10) / 400)),
+            RandAugment(k=3),
+            torchvision.transforms.ToTensor(),
+            normalize])
+
+        self.transform_twice = TransformTwice(self.imsize)
+
+    def __len__(self):
+        return len(self.labels)
+
+    def __getitem__(self, idx):
+        path = self.imfiles[idx]
+        label = self.labels[idx]
+        im = Image.open(path).convert("RGB")
+        im = self.transform(im)
+        return idx, im, label
+
+
 def get_froth_data():
     full_data = data4cls()
+    train_size = int(0.6 * len(full_data))
+    val_size = int(0.2 * len(full_data))
+    test_size = len(full_data) - train_size - val_size
+    train_data, val_data, test_data = torch.utils.data.random_split(full_data, [train_size, val_size, test_size], generator=torch.Generator().manual_seed(42))
+    return train_data, val_data, test_data
+
+
+def get_stibium_data():
+    full_data = stibium_data()
     train_size = int(0.6 * len(full_data))
     val_size = int(0.2 * len(full_data))
     test_size = len(full_data) - train_size - val_size
